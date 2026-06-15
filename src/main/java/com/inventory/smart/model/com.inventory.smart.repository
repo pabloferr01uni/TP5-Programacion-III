@@ -1,0 +1,82 @@
+package com.inventory.smart.model;
+
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Representa un producto dentro del inventario.
+ *
+ * @since 1.0
+ */
+public class Producto {
+
+    private final Long id;
+    private final String nombre;
+    private final String descripcion;
+    private final double precio;
+    private final AtomicInteger stock;
+    private final Long categoriaId;
+
+    public Producto(Long id, String nombre, String descripcion, double precio, int stock, Long categoriaId) {
+        if (precio < 0) {
+            throw new IllegalArgumentException("El precio no puede ser negativo");
+        }
+        if (stock < 0) {
+            throw new IllegalArgumentException("El stock no puede ser negativo");
+        }
+        this.id = id;
+        this.nombre = Objects.requireNonNull(nombre, "El nombre no puede ser nulo");
+        this.descripcion = Objects.requireNonNull(descripcion, "La descripción no puede ser nula");
+        this.precio = precio;
+        this.stock = new AtomicInteger(stock);
+        this.categoriaId = Objects.requireNonNull(categoriaId, "La categoría no puede ser nula");
+    }
+
+    public Long getId() { return id; }
+    public String getNombre() { return nombre; }
+    public String getDescripcion() { return descripcion; }
+    public double getPrecio() { return precio; }
+    public int getStock() { return stock.get(); }
+    public Long getCategoriaId() { return categoriaId; }
+
+    public int incrementarStock(int cantidad) {
+        if (cantidad <= 0) {
+            throw new IllegalArgumentException("La cantidad a incrementar debe ser positiva");
+        }
+        return stock.addAndGet(cantidad);
+    }
+
+    public boolean decrementarStock(int cantidad) {
+        if (cantidad <= 0) {
+            throw new IllegalArgumentException("La cantidad a decrementar debe ser positiva");
+        }
+        int valorPresente;
+        int valorFuturo;
+        do {
+            valorPresente = stock.get();
+            if (valorPresente < cantidad) {
+                return false;
+            }
+            valorFuturo = valorPresente - cantidad;
+        } while (!stock.compareAndSet(valorPresente, valorFuturo));
+        return true;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Producto producto)) return false;
+        return id != null && Objects.equals(id, producto.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    @Override
+    public String toString() {
+        return "Producto{id=" + id + ", nombre='" + nombre + "', precio=" + precio
+                + ", stock=" + stock.get() + ", categoriaId=" + categoriaId + "}";
+    }
+}

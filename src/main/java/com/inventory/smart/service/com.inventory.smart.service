@@ -1,0 +1,179 @@
+package com.inventory.smart.service;
+
+import com.inventory.smart.dto.ProductoRequest;
+import com.inventory.smart.dto.ProductoResponse;
+import com.inventory.smart.exception.ResourceNotFoundException;
+import com.inventory.smart.model.Categoria;
+import com.inventory.smart.model.Producto;
+import com.inventory.smart.repository.CategoriaRepository;
+import com.inventory.smart.repository.ProductoRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import java.util.Comparator;
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * Implementación del servicio de gestión de productos.
+ *
+ * @since 1.0
+ */
+@Service
+public class ProductoServiceImpl implements ProductoService {
+
+    private static final Logger log = LoggerFactory.getLogger(ProductoServiceImpl.class);
+    private final ProductoRepository productoRepository;
+    private final CategoriaRepository categoriaRepository;
+
+    /**
+     * Inyección por constructor de las dependencias del servicio.
+     *
+     * @param productoRepository  repositorio de productos
+     * @param categoriaRepository repositorio de categorías
+     */
+    public ProductoServiceImpl(ProductoRepository productoRepository,
+                               CategoriaRepository categoriaRepository) {
+        this.productoRepository = productoRepository;
+        this.categoriaRepository = categoriaRepository;
+    }
+
+    @Override
+    public List<ProductoResponse> findAll(String categoria, Double precioMin, Double precioMax, Boolean enStock) {
+        log.debug("findAll: categoria={}, precioMin={}, precioMax={}, enStock={}",
+                categoria, precioMin, precioMax, enStock);
+        var flujoDatos = productoRepository.findAll().stream();
+
+        if (categoria != null && !categoria.isBlank()) {
+            var categoriaEncontrada = categoriaRepository.findByNombre(categoria);
+            if (categoriaEncontrada.isPresent()) {
+                Long identificadorCat = categoriaEncontrada.get().getId();
+                flujoDatos = flujoDatos.filter(p -> p.getCategoriaId().equals(identificadorCat));
+            } else {
+                return List.of();
+            }
+        }
+
+        if (precioMin != null) {
+            flujoDatos = flujoDatos.filter(p -> p.getPrecio() >= precioMin);
+        }
+
+        if (precioMax != null) {
+            flujoDatos = flujoDatos.filter(p -> p.getPrecio() <= precioMax);
+        }
+
+        if (enStock != null && enStock) {
+            flujoDatos = flujoDatos.filter(p -> p.getStock() > 0);
+        }
+
+        return flujoDatos.map(this::toResponse).collect(Collectors.toList());
+    }
+
+    @Override
+    public ProductoResponse findById(Long id) throws ResourceNotFoundException {
+        log.debug("findById: id={}", id);
+        Producto prodActual = productoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Producto", id));
+        return toResponse(prodActual);
+    }
+
+    @Override
+    public ProductoResponse create(ProductoRequest request) throws ResourceNotFoundException {
+        log.debug("create: nombre='{}'", request.nombre());
+        Categoria validacionCat = categoriaRepository.findById(request.categoriaId())
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Categoria", request.categoriaId()));
+
+        Producto nuevoArticulo = new Producto(
+                null,
+                request.nombre(),
+                request.descripcion(),
+                request.precio(),
+                request.stockInicial(),
+                request.categoriaId()
+        );
+
+        Producto productoGuardado = productoRepository.save(nuevoArticulo);
+        log.info("Producto creado: id={}, nombre='{}'", productoGuardado.getId(), productoGuardado.getNombre());
+        return toResponse(productoGuardado);
+    }
+
+    @Override
+    public ProductoResponse update(Long id, ProductoRequest request) throws ResourceNotFoundException {
+        log.debug("update: id={}", id);
+        Producto productoBase = productoRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Producto", id));
+
+        if (!productoBase.getCategoriaId().equals(request.categoriaId())) {
+            if (!categoriaRepository.existsById(request.categoriaId())) {
+                throw new ResourceNotFoundException("Categoria", request.categoriaId());
+            }
+        }
+
+        Producto productoModificado = new Producto(
+                id,
+                request.nombre(),
+                request.descripcion(),
+                request.precio(),
+                request.stockInicial(),
+                request.categoriaId()
+        );
+
+        Producto prodRegistrado = productoRepository.save(productoModificado);
+        log.info("Producto actualizado: id={}, nombre='{}'", prodRegistrado.getId(), prodRegistrado.getNombre());
+        return toResponse(prodRegistrado);
+    }
+
+    @Override
+    public void delete(Long id) throws ResourceNotFoundException {
+        log.debug("delete: id={}", id);
+        if (!productoRepository.existsById(id)) {
+            throw new ResourceNotFoundException("Producto", id);
+        }
+        productoRepository.deleteById(id);
+        log.info("Producto eliminado: id={}", id);
+    }
+
+    @Override
+    public List<ProductoResponse> buscarPorNombre(String query) {
+        log.debug("buscarPorNombre: query='{}'", query);
+        return productoRepository.buscarPorNombre(query)
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<ProductoResponse> findAllOrderedBy(String campo, String orden) {
+        log.debug("findAllOrderedBy: campo={}, orden={}", campo, orden);
+        List<Producto> listaTotal = productoRepository.findAll();
+
+        Comparator<Producto> criterioOrdenamiento = switch (campo != null ? campo.toLowerCase() : "") {
+            case "precio" -> Comparator.comparingDouble(Producto::getPrecio);
+            case "stock" -> Comparator.comparingInt(Producto::getStock);
+            case "nombre" -> Comparator.comparing(Producto::getNombre);
+            default -> null;
+        };
+
+        if (criterioOrdenamiento == null) {
+            return listaTotal.stream().map(this::toResponse).collect(Collectors.toList());
+        }
+
+        if ("desc".equalsIgnoreCase(orden)) {
+            criterioOrdenamiento = criterioOrdenamiento.reversed();
+        }
+
+        return listaTotal.stream()
+                .sorted(criterioOrdenamiento)
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+    }
+
+    private ProductoResponse toResponse(Producto producto) {
+        String nombreCategoriaAsociada = categoriaRepository.findById(producto.getCategoriaId())
+                .map(Categoria::getNombre)
+                .orElse("Desconocida");
+        return ProductoResponse.fromProducto(producto, nombreCategoriaAsociada);
+    }
+}

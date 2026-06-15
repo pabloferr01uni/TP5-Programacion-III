@@ -1,0 +1,98 @@
+package com.inventory.smart.repository;
+
+import com.inventory.smart.exception.ResourceNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * Implementación genérica en memoria de {@link IGenericRepository} usando
+ * {@link ConcurrentHashMap} para operaciones thread-safe de complejidad O(1).
+ *
+ * @param <T>  tipo de la entidad gestionada
+ * @param <ID> tipo del identificador único
+ *
+ * @since 1.0
+ */
+public abstract class GenericInMemoryRepository<T, ID> implements IGenericRepository<T, ID> {
+
+    private static final Logger log = LoggerFactory.getLogger(GenericInMemoryRepository.class);
+
+    protected final ConcurrentHashMap<ID, T> almacenamientoData = new ConcurrentHashMap<>();
+    protected final AtomicLong generadorSecuencia = new AtomicLong(1);
+
+    /**
+     * Extrae el identificador de una entidad.
+     *
+     * @param entity la entidad de la cual extraer el identificador
+     * @return el identificador único de la entidad
+     */
+    protected abstract ID extractId(T entity);
+
+    /**
+     * Crea una nueva instancia de la entidad con el identificador asignado.
+     *
+     * @param entity la entidad original
+     * @param id     el nuevo identificador a asignar
+     * @return una nueva instancia de la entidad con el ID asignado
+     */
+    protected abstract T withId(T entity, ID id);
+
+    /**
+     * Convierte el {@link AtomicLong} al tipo de identificador concreto.
+     *
+     * @param value el valor numérico generado
+     * @return el identificador tipado
+     */
+    @SuppressWarnings("unchecked")
+    protected ID toId(long value) {
+        return (ID) Long.valueOf(value);
+    }
+
+    @Override
+    public List<T> findAll() {
+        return new ArrayList<>(almacenamientoData.values());
+    }
+
+    @Override
+    public Optional<T> findById(ID id) {
+        return Optional.ofNullable(almacenamientoData.get(id));
+    }
+
+    @Override
+    public T save(T entity) {
+        ID id = extractId(entity);
+        if (id == null) {
+            id = toId(generadorSecuencia.getAndIncrement());
+            entity = withId(entity, id);
+        }
+        almacenamientoData.put(id, entity);
+        log.debug("Entidad guardada: id={}, tipo={}", id, entity.getClass().getSimpleName());
+        return entity;
+    }
+
+    @Override
+    public void deleteById(ID id) {
+        T itemBorrado = almacenamientoData.remove(id);
+        if (itemBorrado == null) {
+            throw new ResourceNotFoundException("Entidad", id);
+        }
+        log.debug("Entidad eliminada: id={}", id);
+    }
+
+    @Override
+    public boolean existsById(ID id) {
+        return almacenamientoData.containsKey(id);
+    }
+
+    @Override
+    public long count() {
+        return almacenamientoData.size();
+    }
+}
+

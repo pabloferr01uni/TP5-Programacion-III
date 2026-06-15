@@ -1,0 +1,48 @@
+package com.inventory.smart.repository;
+
+import com.inventory.smart.model.Producto;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Repository;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * Implementación en memoria de {@link ProductoRepository} usando {@link GenericInMemoryRepository}.
+ *
+ * @since 1.0
+ */
+@Repository
+public class InMemoryProductoRepository extends GenericInMemoryRepository<Producto, Long>
+        implements ProductoRepository {
+
+    private static final Logger log = LoggerFactory.getLogger(InMemoryProductoRepository.class);
+
+    @Override
+    protected Long extractId(Producto entity) {
+        return entity.getId();
+    }
+
+    @Override
+    protected Producto withId(Producto entity, Long id) {
+        return new Producto(id, entity.getNombre(), entity.getDescripcion(),
+                entity.getPrecio(), entity.getStock(), entity.getCategoriaId());
+    }
+
+    @Override
+    public List<Producto> findByCategoriaId(Long categoriaId) {
+        return almacenamientoData.values().stream()
+                .filter(p -> p.getCategoriaId().equals(categoriaId))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<Producto> buscarPorNombre(String query) {
+        String terminoMinuscula = query.toLowerCase();
+        return almacenamientoData.values().stream()
+                .filter(p -> p.getNombre().toLowerCase().contains(terminoMinuscula))
+                .collect(Collectors.toList());
+    }
+}
+

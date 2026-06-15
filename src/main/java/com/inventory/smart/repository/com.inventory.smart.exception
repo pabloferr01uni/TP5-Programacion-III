@@ -1,0 +1,38 @@
+package com.inventory.smart.repository;
+
+import com.inventory.smart.model.Categoria;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Repository;
+
+import java.util.Optional;
+
+/**
+ * Implementación en memoria de {@link CategoriaRepository} usando {@link GenericInMemoryRepository}.
+ *
+ * @since 1.0
+ */
+@Repository
+public class InMemoryCategoriaRepository extends GenericInMemoryRepository<Categoria, Long>
+        implements CategoriaRepository {
+
+    private static final Logger log = LoggerFactory.getLogger(InMemoryCategoriaRepository.class);
+
+    @Override
+    protected Long extractId(Categoria entity) {
+        return entity.getId();
+    }
+
+    @Override
+    protected Categoria withId(Categoria entity, Long id) {
+        return new Categoria(id, entity.getNombre(), entity.getDescripcion());
+    }
+
+    @Override
+    public Optional<Categoria> findByNombre(String nombre) {
+        return almacenamientoData.values().stream()
+                .filter(c -> c.getNombre().equals(nombre))
+                .findFirst();
+    }
+}
+

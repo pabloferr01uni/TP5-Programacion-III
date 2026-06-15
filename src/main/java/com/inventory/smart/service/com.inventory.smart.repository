@@ -1,0 +1,79 @@
+package com.inventory.smart.service;
+
+import com.inventory.smart.config.StockConfig;
+import com.inventory.smart.dto.AlertaStockResponse;
+import com.inventory.smart.model.NivelAlerta;
+import com.inventory.smart.repository.CategoriaRepository;
+import com.inventory.smart.repository.ProductoRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+/**
+ * Implementación del servicio de detección de alertas de stock.
+ *
+ * @since 1.0
+ */
+@Service
+public class AlertaServiceImpl implements AlertaService {
+
+    private static final Logger log = LoggerFactory.getLogger(AlertaServiceImpl.class);
+
+    private final ProductoRepository productoRepository;
+    private final CategoriaRepository categoriaRepository;
+    private final StockConfig stockConfig;
+
+    /**
+     * Inyección por constructor de las dependencias del servicio.
+     *
+     * @param productoRepository  repositorio de productos
+     * @param categoriaRepository repositorio de categorías
+     * @param stockConfig         configuración de umbrales de stock
+     */
+    public AlertaServiceImpl(ProductoRepository productoRepository,
+                             CategoriaRepository categoriaRepository,
+                             StockConfig stockConfig) {
+        this.productoRepository = productoRepository;
+        this.categoriaRepository = categoriaRepository;
+        this.stockConfig = stockConfig;
+    }
+
+    @Override
+    public List<AlertaStockResponse> detectarStockBajo() {
+        log.debug("detectarStockBajo: umbral mínimo={}, umbral crítico={}",
+                stockConfig.getMinimo(), stockConfig.getCritico());
+        int umbralMin = stockConfig.getMinimo();
+        int umbralCrit = stockConfig.getCritico();
+
+        List<AlertaStockResponse> listaPeligro = productoRepository.findAll().stream()
+                .filter(p -> p.getStock() < umbralMin)
+                .map(p -> {
+                    NivelAlerta riesgoCalculado = evaluarNivelStock(p.getStock(), umbralMin, umbralCrit);
+                    return AlertaStockResponse.of(
+                            p.getId(),
+                            p.getNombre(),
+                            p.getStock(),
+                            umbralMin,
+                            riesgoCalculado
+                    );
+                })
+                .collect(Collectors.toList());
+        log.info("Stock bajo detectado: {} producto(s) por debajo del mínimo", listaPeligro.size());
+        return listaPeligro;
+    }
+
+    @Override
+    public NivelAlerta evaluarNivelStock(int stockActual, int stockMinimo, int stockCritico) {
+        if (stockActual <= stockCritico) {
+            return NivelAlerta.CRITICO;
+        }
+        if (stockActual < stockMinimo) {
+            return NivelAlerta.BAJO;
+        }
+        return NivelAlerta.NORMAL;
+    }
+}
+
